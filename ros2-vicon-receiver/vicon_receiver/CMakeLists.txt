@@ -24,16 +24,28 @@ include_directories(
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(Boost REQUIRED COMPONENTS thread)
-
+#find_package(Boost REQUIRED COMPONENTS thread)
+find_package(Boost REQUIRED COMPONENTS thread date_time)
+	
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Position.msg"
 )
 
+include_directories(
+    vicon_sdk/DataStream  # For Vicon SDK
+    vicon_sdk             # For StreamCommon, required by ViconSDK
+)
+
 ament_export_dependencies(rosidl_default_runtime)
 
+# Compile Vicon SDK from scratch to avoid Boost version mismatch clashes
+file(GLOB_RECURSE vicon_sdk_files "vicon_sdk/**/**.cpp")
+add_library(vicon_sdk ${vicon_sdk_files})
+target_link_libraries(vicon_sdk PUBLIC ${Boost_LIBRARIES})
+
+
 add_executable(vicon_client src/vicon_receiver/communicator.cpp src/vicon_receiver/publisher.cpp)
-target_link_libraries(vicon_client ViconDataStreamSDK_CPP ${Boost_LIBRARIES})
+target_link_libraries(vicon_client vicon_sdk) #  ViconDataStreamSDK_CPP ${Boost_LIBRARIES})
 ament_target_dependencies(vicon_client "rclcpp")
 
 get_default_rmw_implementation(rmw_implementation)
