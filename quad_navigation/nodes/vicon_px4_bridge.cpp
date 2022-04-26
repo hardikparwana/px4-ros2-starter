@@ -75,7 +75,7 @@ class vicon_px4_bridge: public rclcpp::Node
 			pose.z = -msg->z_trans/1000;
 
 			tf2::Quaternion quat(msg->w, msg->x_rot, msg->y_rot, msg->z_rot);
-			yaw = -tf2::getYaw(quat) + PI;
+			yaw = -tf2::getYaw(quat) + PI/2.0f;
 			pose.q[0] = cos( yaw/2.0f );
 			pose.q[3] = sin( yaw/2.0f );
 
