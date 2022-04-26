@@ -12,6 +12,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(Boost REQUIRED COMPONENTS thread date_time)
 find_package(std_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(vicon_receiver REQUIRED)

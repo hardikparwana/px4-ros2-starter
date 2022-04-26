@@ -39,9 +39,19 @@ include_directories(
 ament_export_dependencies(rosidl_default_runtime)
 
 # Compile Vicon SDK from scratch to avoid Boost version mismatch clashes
-file(GLOB_RECURSE vicon_sdk_files "vicon_sdk/**/**.cpp")
+file(GLOB_RECURSE vicon_sdk_files "${CMAKE_CURRENT_SOURCE_DIR}/vicon_sdk/**/**.cpp")
 add_library(vicon_sdk ${vicon_sdk_files})
 target_link_libraries(vicon_sdk PUBLIC ${Boost_LIBRARIES})
+ament_export_targets(export_vicon_sdk HAS_LIBRARY_TARGET)
+
+install(
+  TARGETS vicon_sdk
+  EXPORT export_vicon_sdk
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
 
 
 add_executable(vicon_client src/vicon_receiver/communicator.cpp src/vicon_receiver/publisher.cpp)
