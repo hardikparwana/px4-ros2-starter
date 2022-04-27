@@ -43,6 +43,7 @@ class QuadController: public rclcpp::Node
 	Eigen::Matrix3f J;
 	float Ixx, Iyy, Izz;
 	float torque_constant = 1000;
+	float tradeoff = 0.0;
 
 	// Time Variables
 	rclcpp::TimerBase::SharedPtr timer_;
@@ -79,6 +80,7 @@ class QuadController: public rclcpp::Node
 			this->declare_parameter<float>("Izz", 0.06);
 			this->declare_parameter<float>("Hover Thrust", _hover_throttle);
 			this->declare_parameter<float>("torque_constant",torque_constant);
+			this->declare_parameter<float>("tradeoff",tradeoff);
 
 			this->get_parameter("publish_freq",publish_freq);			
 			this->get_parameter("kx", kx);
@@ -91,6 +93,7 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("Izz", Izz);
 			this->get_parameter("Hover Thrust", _hover_throttle);
 			this->get_parameter("torque_constant", torque_constant);
+			this->get_parameter<float>("tradeoff",tradeoff);
 			J << Ixx, 0, 0,
 			      0, Iyy, 0,
 			      0, 0, Izz;
@@ -133,6 +136,7 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("Izz", Izz);
 			this->get_parameter("Hover Thrust", _hover_throttle);
 			this->get_parameter("torque_constant",torque_constant);
+			this->get_parameter<float>("lambda",lambda);
 		}
 
 		void position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg) 
@@ -231,8 +235,11 @@ class QuadController: public rclcpp::Node
 			external_actuator_controls.pitch = angular_acceleration(1)/torque_constant;
 			external_actuator_controls.yaw = angular_acceleration(2)/torque_constant;
 			external_actuator_controls.thrust = f;
+			external_actuator_controls.tradeoff = tradeoff;
 			external_actuator_controls.timestamp = timestamp_.load();
 			pub_actuator->publish(external_actuator_controls);
+
+			std::cout << "lambda: " << external_actuator_controls.lambda << std::endl;
 		}
 
 		Eigen::Matrix3f vector_to_skew_symmetric(Eigen::Vector3f vec)
