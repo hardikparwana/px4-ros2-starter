@@ -74,10 +74,12 @@ class vicon_px4_bridge: public rclcpp::Node
 			pose.y = msg->x_trans/1000;
 			pose.z = -msg->z_trans/1000;
 
-			tf2::Quaternion quat(msg->w, msg->x_rot, msg->y_rot, msg->z_rot);
+			tf2::Quaternion quat(msg->x_rot, msg->y_rot, msg->z_rot,msg->w);
 			yaw = -tf2::getYaw(quat) + PI/2.0f;
 			pose.q[0] = cos( yaw/2.0f );
 			pose.q[3] = sin( yaw/2.0f );
+
+			std::cout << "quat: " << quat.w() << "\t" << quat.x() << "\t" << quat.y() << "\t" << quat.z()  << " yaw: " << -tf2::getYaw(quat) << std::endl;
 
 			// Variables			
 			pose.local_frame = px4_msgs::msg::VehicleVisualOdometry::LOCAL_FRAME_NED;

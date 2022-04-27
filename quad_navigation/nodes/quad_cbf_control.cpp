@@ -30,23 +30,28 @@ class QuadController: public rclcpp::Node
 	Eigen::Quaternionf setpoint_quat;
 	float yaw_des = 0.0;
 	Eigen::Vector3f setpoint_omega;
+	Eigen::Matrix3f setpoint_R_prev;
 
 	// Control Parameters
 	float kx = 3.0;
-	float kv = 2.0;
-	float kR = 2.0;
-	float kOmega = 0.5;
-	float mass = 1.0;
+	float kv = 0.0;//2.0;
+	float kR = 0.1;//2.0;
+	float kOmega = 0.0;//1.0;//0.5;
+	float mass = 0.817;//1.0;
 	float g = 9.81;
-	float _hover_throttle = 0.7;
+	float _hover_throttle = 0.55;//0.7;
 	Eigen::Matrix3f J;
 	float Ixx, Iyy, Izz;
+	float torque_constant = 1000;
 
 	// Time Variables
 	rclcpp::TimerBase::SharedPtr timer_;
 	size_t count_;
 	std::atomic<uint64_t> timestamp_;
 	float publish_freq;
+
+	std::chrono::system_clock::time_point tp1 = std::chrono::system_clock::now(); 
+	std::chrono::system_clock::time_point tp2 = std::chrono::system_clock::now(); 
 
 	// Publishers
     rclcpp::Publisher<px4_msgs::msg::ExternalActuatorControls>::SharedPtr pub_actuator;
@@ -64,15 +69,16 @@ class QuadController: public rclcpp::Node
 		{
 			// Parameters
 			this->declare_parameter<float>("publish_freq", 200);
-			this->declare_parameter<float>("kx", 3.0);
-			this->declare_parameter<float>("kv", 2.0);
-			this->declare_parameter<float>("kR", 2.0);
-			this->declare_parameter<float>("kOmega", 0.5);
-			this->declare_parameter<float>("mass", 1.5);
+			this->declare_parameter<float>("kx", kx);
+			this->declare_parameter<float>("kv", kv);
+			this->declare_parameter<float>("kR", kR);
+			this->declare_parameter<float>("kOmega", kOmega);
+			this->declare_parameter<float>("mass", mass);
 			this->declare_parameter<float>("Ixx", 0.03);
 			this->declare_parameter<float>("Iyy", 0.03);
 			this->declare_parameter<float>("Izz", 0.06);
-			this->declare_parameter<float>("Hover Thrust", 0.72);
+			this->declare_parameter<float>("Hover Thrust", _hover_throttle);
+			this->declare_parameter<float>("torque_constant",torque_constant);
 
 			this->get_parameter("publish_freq",publish_freq);			
 			this->get_parameter("kx", kx);
@@ -84,11 +90,13 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("Iyy", Iyy);
 			this->get_parameter("Izz", Izz);
 			this->get_parameter("Hover Thrust", _hover_throttle);
+			this->get_parameter("torque_constant", torque_constant);
 			J << Ixx, 0, 0,
 			      0, Iyy, 0,
 			      0, 0, Izz;
-			setpoint_pos << 0,0,-10.02,0,0,0,0,0,0;
+			setpoint_pos << 0,0,-0.6,0,0,0,0,0,0;
 			setpoint_quat = Eigen::Quaternionf::Identity();
+			setpoint_R_prev = Eigen::Matrix3f::Identity();
 			setpoint_omega << 0,0,0;
 
 			// Subscribers
@@ -99,7 +107,7 @@ class QuadController: public rclcpp::Node
 			
 			// Publishers
 			pub_actuator = this->create_publisher<px4_msgs::msg::ExternalActuatorControls>("/fmu/external_actuator_controls/in",10);			
-			timer_ = this->create_wall_timer(5ms, std::bind(&QuadController::controller_callback, this));
+			timer_ = this->create_wall_timer(2ms, std::bind(&QuadController::controller_callback, this));
 
 			sub_parameter = this->create_wall_timer(
       					1000ms, std::bind(&QuadController::update_parameters, this));
@@ -124,6 +132,7 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("Iyy", Iyy);
 			this->get_parameter("Izz", Izz);
 			this->get_parameter("Hover Thrust", _hover_throttle);
+			this->get_parameter("torque_constant",torque_constant);
 		}
 
 		void position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg) 
@@ -142,6 +151,7 @@ class QuadController: public rclcpp::Node
 		void angular_velocity_callback(const px4_msgs::msg::VehicleAngularVelocity::SharedPtr msg) 
 		{
 			state_omega << msg->xyz[0], msg->xyz[1], msg->xyz[2];
+		//	std::cout << state_omega << std::endl;
 		}
 
 		void setpoint_callback(const px4_msgs::msg::TrajectorySetpoint::SharedPtr msg) 
@@ -176,13 +186,31 @@ class QuadController: public rclcpp::Node
 			Eigen::Vector3f b1d(cos(yaw_des), sin(yaw_des), 0);
 			Eigen::Vector3f b2d = (b3d.cross(b1d)).normalized();
 			b1d = (b2d.cross(b3d)).normalized();  //x1
-			Eigen::Matrix3d Rd(3,3);
 			setpoint_R << b1d, b2d, b3d; 	
 
+			tp2 = std::chrono::system_clock::now();
+//			std::cout << "tp2 " << tp2 << "tp1: " << tp1 << std::endl;
+			std::chrono::nanoseconds dt = std::chrono::duration_cast<std::chrono::nanoseconds>(tp2-tp1);
+			Eigen::Matrix3f setpoint_Rdot = (setpoint_R - setpoint_R_prev)/(dt.count()/1000000000.0);
+			//std::cout << "Rd: " << setpoint_R << "\n Rd_prev: " << setpoint_R_prev << "\n Rdot: " << setpoint_Rdot << std::endl;
+			setpoint_omega = skew_symmetric_to_vector( setpoint_R.transpose() * setpoint_Rdot );
+			//std::cout << "dt: " << dt.count()/1000000000.0 << "setpoint_omega: " << setpoint_omega.transpose() << std::endl;
+			tp1 = std::chrono::system_clock::now();
+			setpoint_R_prev = setpoint_R;
+
 			setpoint_omega << 0.0,0.0,0.0;
+
+			setpoint_R << 1.0, 0.0, 0.0,
+				      0.0, 0.0, 0.0,
+				      0.0, 0.0, 1.0;
+
 			Eigen::Matrix3f setpoint_Omega = vector_to_skew_symmetric(setpoint_omega);
 			Eigen::Vector3f eR = 1.0/2 * skew_symmetric_to_vector( setpoint_R.transpose() * state_R - state_R.transpose() * setpoint_R  );
 			Eigen::Vector3f e_omega = state_omega - state_R.transpose() * setpoint_R * setpoint_omega;
+
+			//std::cout <<  "Yaw Roll Pitch " << state_R.eulerAngles(2,1,0).transpose() << " Angle Desired: " << setpoint_R.eulerAngles(2,1,0).transpose() << std::endl;
+			//std::cout << "eR: " << eR.transpose() << " eOmega: " << e_omega.transpose() << std::endl;
+			std::cout << "ex: " << ex.transpose() << " ev: " << ev.transpose() << "xd: " << setpoint_pos << std::endl;
 
 
 			// Control input calculation
@@ -196,10 +224,12 @@ class QuadController: public rclcpp::Node
 				f = 0.01f;
 			}
 
+			//std::cout << "thrust: " << f << " M: " << angular_acceleration.transpose()/1000 << std::endl;
+
 			px4_msgs::msg::ExternalActuatorControls external_actuator_controls;
-			external_actuator_controls.roll = angular_acceleration(0)/100;
-			external_actuator_controls.pitch = angular_acceleration(1)/100;
-			external_actuator_controls.yaw = angular_acceleration(2)/100;
+			external_actuator_controls.roll = angular_acceleration(0)/torque_constant;
+			external_actuator_controls.pitch = angular_acceleration(1)/torque_constant;
+			external_actuator_controls.yaw = angular_acceleration(2)/torque_constant;
 			external_actuator_controls.thrust = f;
 			external_actuator_controls.timestamp = timestamp_.load();
 			pub_actuator->publish(external_actuator_controls);
