@@ -36,18 +36,19 @@ class QuadController: public rclcpp::Node
 	Eigen::Vector3f state_omega_prev;
 
 	// Control Parameters
-	float kx = 3.0;
-	float kv = 2.0;//0.0;//2.0;
-	float kR = 6.0;//0.1;//2.0;
-	float kOmega = 0.0;//0.0;//1.0;//0.5;
-	float mass = 1.5;//0.817;//1.0;
+	float mass = 0.817;//1.5;//0.817;//1.0;
+	float kx = 11.0*mass;//3.0;
+	float kv = 6.0*mass;//2.0;//0.0;//2.0;
+	float kR = 5.0;//10.0;//6.0;//0.1;//2.0;
+	float kOmega = 2.0;//1.5;//0.0;//0.0;//1.0;//0.5;	
 	float g = 9.81;
 	float _hover_throttle = 0.7;//0.55;//0.7;
 	Eigen::Matrix3f J;
 	float Ixx, Iyy, Izz;
-	float torque_constant = 100;
-	float tradeoff = 0.0;
+	float torque_constant = 1000.0;
+	float tradeoff = 1.0;
 	float torque_max = 0.5;
+	float thrust_max = 0.99;
 
 	double state_pos_t;
 	double state_pos_t_prev;
@@ -93,6 +94,7 @@ class QuadController: public rclcpp::Node
 			this->declare_parameter<float>("torque_constant",torque_constant);
 			this->declare_parameter<float>("tradeoff",tradeoff);
 			this->declare_parameter<float>("torque_max",torque_max);
+			this->declare_parameter<float>("thrust_max",thrust_max);
 
 			this->get_parameter("publish_freq",publish_freq);			
 			this->get_parameter("kx", kx);
@@ -107,6 +109,7 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("torque_constant", torque_constant);
 			this->get_parameter<float>("tradeoff",tradeoff);
 			this->get_parameter<float>("torque_max",torque_max);
+			this->get_parameter<float>("thrust_max",thrust_max);
 			J << Ixx, 0, 0,
 			      0, Iyy, 0,
 			      0, 0, Izz;
@@ -150,6 +153,7 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("torque_constant",torque_constant);
 			this->get_parameter<float>("tradeoff",tradeoff);
 			this->get_parameter<float>("torque_max",torque_max);
+			this->get_parameter<float>("thrust_max",thrust_max);
 		}
 
 		void position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg) 
@@ -191,8 +195,9 @@ class QuadController: public rclcpp::Node
 		void setpoint_callback(const px4_msgs::msg::TrajectorySetpoint::SharedPtr msg) 
 		{
 			setpoint_pos << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz, msg->acceleration[0], msg->acceleration[1], msg->acceleration[2];
-			setpoint_quat.w() = 1.0; setpoint_quat.x() = 0.0; setpoint_quat.y() = 0.0; setpoint_quat.z() = 0.0;
+			// setpoint_quat.w() = cos(msg->yaw/2.0); setpoint_quat.x() = 0.0; setpoint_quat.y() = 0.0; setpoint_quat.z() = sin(msg->yaw/2.0);
 			// setpoint_omega << 0.0, 0.0, 0.0;
+			yaw_des = msg->yaw;
 		}
 
 		// Geometric Controller
@@ -241,7 +246,7 @@ class QuadController: public rclcpp::Node
 			}
 			Eigen::Vector3f b1d_prev(cos(yaw_des), sin(yaw_des), 0);
 			Eigen::Vector3f b2d_prev = (b3d_prev.cross(b1d_prev)).normalized();
-			b1d = (b2d_prev.cross(b3d_prev)).normalized();  //x1
+			b1d_prev = (b2d_prev.cross(b3d_prev)).normalized();  //x1
 			setpoint_R_prev << b1d_prev, b2d_prev, b3d_prev; 
 			/////////////////////////////////////
 
@@ -274,8 +279,10 @@ class QuadController: public rclcpp::Node
 			// std::cout << "ex: " << ex.transpose() << " ev: " << ev.transpose() << "xd: " << setpoint_pos << std::endl;
 
 			// Control input calculation
+			Eigen::Vector3f setpoint_omega_dot;
+			setpoint_omega_dot << 0, 0, 0;
 			float f =  -( -kx * ex - kv * ev - mass * g * Eigen::Vector3f(0,0,1) + mass * setpoint_pos.segment(6,3) ).transpose() * state_R * Eigen::Vector3f(0,0,1);
-			Eigen::Vector3f M = - kR * eR - kOmega * e_omega + state_Omega * J * state_omega - J * ( state_Omega * state_R.transpose() * setpoint_R * setpoint_omega );// - state_R.transpose() * setpoint_R *  );
+			Eigen::Vector3f M = - kR * eR - kOmega * e_omega + state_Omega * J * state_omega - J * ( state_Omega * state_R.transpose() * setpoint_R * setpoint_omega - state_R.transpose() * setpoint_R * setpoint_omega_dot );
 			Eigen::Vector3f angular_acceleration = J.inverse() * ( M - state_Omega * J * state_omega ) / torque_constant;
 
 			// Normalize inputs
@@ -283,6 +290,11 @@ class QuadController: public rclcpp::Node
 			if (f<0){
 				f = 0.01f;
 			}
+
+			if (f>thrust_max){
+				f = thrust_max;
+				std::cout << "Passed Thrust Limit. Constraining.................." << std::endl;
+			}	
 
 			//std::cout << "thrust: " << f << " M: " << angular_acceleration.transpose()/1000 << std::endl;
 			if (angular_acceleration.norm() > torque_max){
