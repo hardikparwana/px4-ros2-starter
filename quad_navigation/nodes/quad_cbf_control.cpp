@@ -46,7 +46,10 @@ class QuadController: public rclcpp::Node
 	Eigen::Matrix3f J;
 	float Ixx, Iyy, Izz;
 	float torque_constant = 1000.0;
-	float tradeoff = 1.0;
+	float tradeoff_thrust = 1.0;
+	float tradeoff_roll = 1.0;
+	float tradeoff_pitch = 1.0;
+	float tradeoff_yaw = 1.0;
 	float torque_max = 0.5;
 	float thrust_max = 0.99;
 
@@ -92,7 +95,10 @@ class QuadController: public rclcpp::Node
 			this->declare_parameter<float>("Izz", 0.06);
 			this->declare_parameter<float>("Hover Thrust", _hover_throttle);
 			this->declare_parameter<float>("torque_constant",torque_constant);
-			this->declare_parameter<float>("tradeoff",tradeoff);
+			this->declare_parameter<float>("tradeoff_thrust",tradeoff_thrust);
+			this->declare_parameter<float>("tradeoff_roll",tradeoff_roll);
+			this->declare_parameter<float>("tradeoff_pitch",tradeoff_pitch);
+			this->declare_parameter<float>("tradeoff_yaw",tradeoff_yaw);
 			this->declare_parameter<float>("torque_max",torque_max);
 			this->declare_parameter<float>("thrust_max",thrust_max);
 
@@ -107,7 +113,10 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("Izz", Izz);
 			this->get_parameter("Hover Thrust", _hover_throttle);
 			this->get_parameter("torque_constant", torque_constant);
-			this->get_parameter<float>("tradeoff",tradeoff);
+			this->get_parameter<float>("tradeoff_thrust",tradeoff_thrust);
+			this->get_parameter<float>("tradeoff_roll",tradeoff_roll);
+			this->get_parameter<float>("tradeoff_pitch",tradeoff_pitch);
+			this->get_parameter<float>("tradeoff_yaw",tradeoff_yaw);
 			this->get_parameter<float>("torque_max",torque_max);
 			this->get_parameter<float>("thrust_max",thrust_max);
 			J << Ixx, 0, 0,
@@ -151,7 +160,10 @@ class QuadController: public rclcpp::Node
 			this->get_parameter("Izz", Izz);
 			this->get_parameter("Hover Thrust", _hover_throttle);
 			this->get_parameter("torque_constant",torque_constant);
-			this->get_parameter<float>("tradeoff",tradeoff);
+			this->get_parameter<float>("tradeoff_thrust",tradeoff_thrust);
+			this->get_parameter<float>("tradeoff_roll",tradeoff_roll);
+			this->get_parameter<float>("tradeoff_pitch",tradeoff_pitch);
+			this->get_parameter<float>("tradeoff_yaw",tradeoff_yaw);
 			this->get_parameter<float>("torque_max",torque_max);
 			this->get_parameter<float>("thrust_max",thrust_max);
 		}
@@ -307,7 +319,10 @@ class QuadController: public rclcpp::Node
 			external_actuator_controls.pitch = angular_acceleration(1);
 			external_actuator_controls.yaw = angular_acceleration(2);
 			external_actuator_controls.thrust = f;
-			external_actuator_controls.tradeoff = tradeoff;
+			external_actuator_controls.tradeoff_thrust = tradeoff_thrust;
+			external_actuator_controls.tradeoff_roll = tradeoff_roll;
+			external_actuator_controls.tradeoff_pitch = tradeoff_pitch;
+			external_actuator_controls.tradeoff_yaw = tradeoff_yaw;
 			external_actuator_controls.timestamp = state_omega_t;//  timestamp_.load();
 			// std::cout << "previously published time: " << timestamp_.load()/1000.0 << std::endl;
 			pub_actuator->publish(external_actuator_controls);

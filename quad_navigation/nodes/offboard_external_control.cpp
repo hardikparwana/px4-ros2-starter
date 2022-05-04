@@ -144,7 +144,7 @@ void OffboardControl::publish_trajectory_setpoint() const {
 	msg.x = 0.0;
 	msg.y = 0.0;
 	msg.z = -0.6;//-5;//-0.6;
-	msg.yaw = 1.57; // [-PI:PI]
+	msg.yaw = 0.0;//1.57; // [-PI:PI]
 
 	trajectory_setpoint_publisher_->publish(msg);
 }
