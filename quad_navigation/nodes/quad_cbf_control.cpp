@@ -37,21 +37,25 @@ class QuadController: public rclcpp::Node
 
 	// Control Parameters
 	float mass = 0.817;//1.5;//0.817;//1.0;
-	float kx = 11.0*mass;//3.0;
-	float kv = 6.0*mass;//2.0;//0.0;//2.0;
-	float kR = 5.0;//10.0;//6.0;//0.1;//2.0;
-	float kOmega = 2.0;//1.5;//0.0;//0.0;//1.0;//0.5;	
+	float kx = 1.0;//11.0*mass;//3.0;
+	float kv = 2.05;//6.0*mass;//2.0;//0.0;//2.0;
+	float kR = 0.35;//5.0;//10.0;//6.0;//0.1;//2.0;
+	float kOmega = 0.15;//4.0;//2.0;//1.5;//0.0;//0.0;//1.0;//0.5;	
 	float g = 9.81;
-	float _hover_throttle = 0.7;//0.55;//0.7;
+	float _hover_throttle = 0.51;//0.7;//0.55;//0.7;
 	Eigen::Matrix3f J;
-	float Ixx, Iyy, Izz;
-	float torque_constant = 1000.0;
-	float tradeoff_thrust = 1.0;
+	float Ixx = 0.03;
+	float Iyy = 0.03;
+	float Izz = 0.06;
+	float torque_constant = 50.0;//100.0;
+	float tradeoff_thrust = 0.0;
 	float tradeoff_roll = 1.0;
 	float tradeoff_pitch = 1.0;
 	float tradeoff_yaw = 1.0;
-	float torque_max = 0.5;
+	float torque_max = 0.6;
 	float thrust_max = 0.99;
+	bool attitude_mode = 0;
+	float attitude_mode_yaw_degrees = 0.0;
 
 	double state_pos_t;
 	double state_pos_t_prev;
@@ -101,6 +105,8 @@ class QuadController: public rclcpp::Node
 			this->declare_parameter<float>("tradeoff_yaw",tradeoff_yaw);
 			this->declare_parameter<float>("torque_max",torque_max);
 			this->declare_parameter<float>("thrust_max",thrust_max);
+			this->declare_parameter<bool>("attitude_mode",attitude_mode);
+			this->declare_parameter<float>("attitude_mode_yaw_degrees",attitude_mode_yaw_degrees);
 
 			this->get_parameter("publish_freq",publish_freq);			
 			this->get_parameter("kx", kx);
@@ -119,6 +125,8 @@ class QuadController: public rclcpp::Node
 			this->get_parameter<float>("tradeoff_yaw",tradeoff_yaw);
 			this->get_parameter<float>("torque_max",torque_max);
 			this->get_parameter<float>("thrust_max",thrust_max);
+			this->get_parameter<bool>("attitude_mode",attitude_mode);
+			this->get_parameter<float>("attitude_mode_yaw_degrees",attitude_mode_yaw_degrees);
 			J << Ixx, 0, 0,
 			      0, Iyy, 0,
 			      0, 0, Izz;
@@ -166,6 +174,11 @@ class QuadController: public rclcpp::Node
 			this->get_parameter<float>("tradeoff_yaw",tradeoff_yaw);
 			this->get_parameter<float>("torque_max",torque_max);
 			this->get_parameter<float>("thrust_max",thrust_max);
+			this->get_parameter<bool>("attitude_mode",attitude_mode);
+                        this->get_parameter<float>("attitude_mode_yaw_degrees",attitude_mode_yaw_degrees);
+			J << Ixx, 0.0, 0.0,
+		    	     0.0, Iyy, 0.0,
+			     0.0, 0.0, Izz;
 		}
 
 		void position_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg) 
@@ -188,6 +201,7 @@ class QuadController: public rclcpp::Node
 			state_quat.x() = msg->q[1];
 			state_quat.y() = msg->q[2];
 			state_quat.z() = msg->q[3];
+			//std::cout << "quat: w: " << state_quat.w() << "\t x: " << state_quat.x() << "\t y: " << state_quat.y() << "\t z:" << state_quat.z() << "\n" << "R: " << state_quat.normalized().toRotationMatrix() << std::endl;
 			state_quat_t = msg->timestamp;
 		}
 
@@ -221,8 +235,8 @@ class QuadController: public rclcpp::Node
 			Eigen::Vector3f ex = state_pos.segment(0,3) - setpoint_pos.segment(0,3);
 			Eigen::Vector3f ev = state_pos.segment(3,3) - setpoint_pos.segment(3,3);	
 
-			Eigen::Vector3f ex_prev = state_pos_prev.segment(0,3) - setpoint_pos.segment(0,3);
-			Eigen::Vector3f ev_prev = state_pos_prev.segment(3,3) - setpoint_pos.segment(3,3);		
+			//Eigen::Vector3f ex_prev = state_pos_prev.segment(0,3) - setpoint_pos.segment(0,3);
+			//Eigen::Vector3f ev_prev = state_pos_prev.segment(3,3) - setpoint_pos.segment(3,3);		
 			///////////////////////////////////////////////	
 			
 			////////// Rotational Errors
@@ -233,6 +247,7 @@ class QuadController: public rclcpp::Node
 			// Desired Rotation Matrix
 			Eigen::Matrix3f setpoint_R; 
 			Eigen::Vector3f b3d = -( -kx * ex - kv * ev - mass * g * Eigen::Vector3f(0,0,1) + mass * setpoint_pos.segment(6,3) );
+			//std::cout << "ex: " << ex.transpose() << " ev: " << ev.transpose()  << " b3d: " << b3d.transpose() << std::endl;
 			if (b3d.norm()>0.01) {
 				b3d = b3d.normalized();
 			}
@@ -244,9 +259,11 @@ class QuadController: public rclcpp::Node
 			Eigen::Vector3f b2d = (b3d.cross(b1d)).normalized();
 			b1d = (b2d.cross(b3d)).normalized();  //x1
 			setpoint_R << b1d, b2d, b3d; 	
+			//std::cout << "Rd: " << setpoint_R << std::endl;
 			//////////////////////////////////////
 
 			// Desired Previous Rotation Matrix based on current setpoint
+			/*
 			Eigen::Matrix3f setpoint_R_prev; 
 			Eigen::Vector3f b3d_prev = -( -kx * ex_prev - kv * ev_prev - mass * g * Eigen::Vector3f(0,0,1) + mass * setpoint_pos.segment(6,3) );
 			if (b3d_prev.norm()>0.01) {
@@ -271,17 +288,20 @@ class QuadController: public rclcpp::Node
 			Eigen::Matrix3f setpoint_Rdot = (setpoint_R - setpoint_R_prev)/dt;
 			setpoint_omega = skew_symmetric_to_vector( setpoint_R.transpose() * setpoint_Rdot );
 			// std::cout << "dt: " << dt << "setpoint_omega: " << setpoint_omega.transpose() << std::endl;
-
+			*/
 			//std::cout << "Rd: " << setpoint_R << "\n Rd_prev: " << setpoint_R_prev << "\n Rdot: " << setpoint_Rdot << std::endl;
 			//std::cout << "dt: " << dt.count()/1000000000.0 << "setpoint_omega: " << setpoint_omega.transpose() << std::endl;
 			// tp1 = std::chrono::system_clock::now();
 
 			// Test Altitude
-			// setpoint_omega << 0.0,0.0,0.0;
-			// setpoint_R << 1.0, 0.0, 0.0,
-			// 	      0.0, 0.0, 0.0,
-			// 	      0.0, 0.0, 1.0;
-
+		        setpoint_omega << 0.0,0.0,0.0;
+			if (attitude_mode){
+				float attitude_mode_yaw = attitude_mode_yaw_degrees * 3.1457/180.0;
+				setpoint_R << cos(attitude_mode_yaw), -sin(attitude_mode_yaw), 0.0,
+					      sin(attitude_mode_yaw),  cos(attitude_mode_yaw), 0.0,
+					      0.0, 0.0, 1.0;
+			}
+			// std::cout << "R: " << state_R << "Rd: " << setpoint_R << "\n";
 			Eigen::Matrix3f setpoint_Omega = vector_to_skew_symmetric(setpoint_omega);
 			Eigen::Vector3f eR = 1.0/2 * skew_symmetric_to_vector( setpoint_R.transpose() * state_R - state_R.transpose() * setpoint_R  );
 			Eigen::Vector3f e_omega = state_omega - state_R.transpose() * setpoint_R * setpoint_omega;
@@ -293,9 +313,12 @@ class QuadController: public rclcpp::Node
 			// Control input calculation
 			Eigen::Vector3f setpoint_omega_dot;
 			setpoint_omega_dot << 0, 0, 0;
+			
 			float f =  -( -kx * ex - kv * ev - mass * g * Eigen::Vector3f(0,0,1) + mass * setpoint_pos.segment(6,3) ).transpose() * state_R * Eigen::Vector3f(0,0,1);
 			Eigen::Vector3f M = - kR * eR - kOmega * e_omega + state_Omega * J * state_omega - J * ( state_Omega * state_R.transpose() * setpoint_R * setpoint_omega - state_R.transpose() * setpoint_R * setpoint_omega_dot );
 			Eigen::Vector3f angular_acceleration = J.inverse() * ( M - state_Omega * J * state_omega ) / torque_constant;
+
+			// std::cout << "eR: " << eR.transpose() << " e_omega: " << e_omega.transpose() << "residual: " << state_Omega * J * state_omega << "\n";
 
 			// Normalize inputs
 			f = f / mass / g * _hover_throttle;
@@ -305,12 +328,12 @@ class QuadController: public rclcpp::Node
 
 			if (f>thrust_max){
 				f = thrust_max;
-				std::cout << "Passed Thrust Limit. Constraining.................." << std::endl;
+				//std::cout << "Passed Thrust Limit. Constraining.................." << std::endl;
 			}	
 
 			//std::cout << "thrust: " << f << " M: " << angular_acceleration.transpose()/1000 << std::endl;
 			if (angular_acceleration.norm() > torque_max){
-				std::cout << "Passed Torque Limit. Constraining.................." << std::endl;
+				//std::cout << "Passed Torque Limit. Constraining.................." << std::endl;
 				angular_acceleration = torque_max * angular_acceleration.normalized();
 			}				
 

@@ -37,7 +37,7 @@ class vicon_px4_bridge: public rclcpp::Node
 			// Subscribers and Publishers
 			subscription_ = this->create_subscription<vicon_receiver::msg::Position>("/vicon/quad1/quad1",10, std::bind(&vicon_px4_bridge::vicon_callback, this, _1));
 			publisher_ = this->create_publisher<px4_msgs::msg::VehicleVisualOdometry>("/fmu/vehicle_visual_odometry/in",10);
-			timer_ = this->create_wall_timer(500ms, std::bind(&vicon_px4_bridge::px4_callback, this));
+			timer_ = this->create_wall_timer(40ms, std::bind(&vicon_px4_bridge::px4_callback, this));
 			timesync_sub_ = this->create_subscription<px4_msgs::msg::Timesync>("/fmu/timesync/out", 10,
 								[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
 									timestamp_.store(msg->timestamp);
@@ -79,7 +79,7 @@ class vicon_px4_bridge: public rclcpp::Node
 			pose.q[0] = cos( yaw/2.0f );
 			pose.q[3] = sin( yaw/2.0f );
 
-			std::cout << "quat: " << quat.w() << "\t" << quat.x() << "\t" << quat.y() << "\t" << quat.z()  << " yaw: " << -tf2::getYaw(quat) << std::endl;
+			// std::cout << "quat: " << quat.w() << "\t" << quat.x() << "\t" << quat.y() << "\t" << quat.z()  << " yaw: " << -tf2::getYaw(quat) << std::endl;
 
 			// Variables			
 			pose.local_frame = px4_msgs::msg::VehicleVisualOdometry::LOCAL_FRAME_NED;
