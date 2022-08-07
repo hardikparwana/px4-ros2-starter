@@ -4,6 +4,7 @@
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
 #include <px4_msgs/msg/external_controller.hpp>
+#include <geometry_msgs/msg/pose.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
@@ -13,6 +14,7 @@
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
+using std::placeholders::_1;
 
 class OffboardControl : public rclcpp::Node {
 public:
@@ -26,6 +28,9 @@ public:
 			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in", 10);
 		external_controller_enable_publisher_ = 
 			this->create_publisher<ExternalController>("fmu/external_controller/in", 10);
+		
+		user_setpoint_sub_ = this->create_subscription<geometry_msgs::msg::Pose>("/user_setpoint",10, 
+					std::bind(&OffboardControl::user_setpoint_callback, this, _1));
 
 		// get common timestamp
 		timesync_sub_ =
@@ -49,7 +54,7 @@ public:
             // offboard_control_mode needs to be paired with trajectory_setpoint
 			publish_offboard_control_mode();
 			publish_enable_external_controller(true);
-			std::cout << "sent command" << std::endl;
+			// std::cout << "sent command" << std::endl;
 			publish_trajectory_setpoint();
 
            	// stop the counter after reaching 11
@@ -68,6 +73,12 @@ public:
 	void disarm() const;
 
 private:
+
+	float user_x_sp = 0.0;
+	float user_y_sp = 0.0;
+	float user_z_sp = 0.6;
+	float user_yaw_sp = 0.0;
+
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
@@ -75,6 +86,7 @@ private:
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Publisher<ExternalController>::SharedPtr external_controller_enable_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
+	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr user_setpoint_sub_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 
@@ -85,7 +97,21 @@ private:
 	void publish_trajectory_setpoint() const;
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0,
 				     float param2 = 0.0) const;
+
+	/**
+	 * @brief Receive Pose setpoint from user and update here
+	 */
+	void user_setpoint_callback(const geometry_msgs::msg::Pose::SharedPtr msg) {
+		user_x_sp = msg->position.x;
+		user_y_sp = msg->position.y;
+		user_z_sp = msg->position.z;
+		user_yaw_sp = 0.0;
+
+		RCLCPP_INFO(this->get_logger(), "Position Setpoint changed");
+}
 };
+
+
 
 /**
  * @brief Send a command to Arm the vehicle
@@ -130,7 +156,7 @@ void OffboardControl::publish_enable_external_controller(bool enable) const {
 	msg.timestamp = timestamp_.load();
 	msg.use_external_control = enable;
 	external_controller_enable_publisher_->publish(msg);
-	std::cout << "hello " << enable << timestamp_.load() << std:: endl;
+	// std::cout << "hello " << enable << timestamp_.load() << std:: endl;
 }
 
 /**
@@ -141,10 +167,10 @@ void OffboardControl::publish_enable_external_controller(bool enable) const {
 void OffboardControl::publish_trajectory_setpoint() const {
 	TrajectorySetpoint msg{};
 	msg.timestamp = timestamp_.load();
-	msg.x = 0.0;
-	msg.y = 0.0;
-	msg.z = -0.6;//-5;//-0.6;
-	msg.yaw = 0.0;//1.57; // [-PI:PI]
+	msg.x = user_y_sp;// 0.0;
+	msg.y = user_x_sp;// 0.0;
+	msg.z = -user_z_sp;// -0.6;//-5;//-0.6;
+	msg.yaw = user_yaw_sp; //0.0;//1.57; // [-PI:PI]
 
 	trajectory_setpoint_publisher_->publish(msg);
 }

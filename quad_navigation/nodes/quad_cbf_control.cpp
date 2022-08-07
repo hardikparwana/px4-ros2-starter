@@ -36,19 +36,19 @@ class QuadController: public rclcpp::Node
 	Eigen::Vector3f state_omega_prev;
 
 	// Control Parameters
-	float mass = 0.817;//1.5;//0.817;//1.0;
-	float kx = 1.0;//11.0*mass;//3.0;
+	float mass = 1.5;//1.5;//0.817;//1.0; // gazebo: 1.5. actual:0.817
+	float kx = 4.0;//1.0;//11.0*mass;//3.0;
 	float kv = 2.05;//6.0*mass;//2.0;//0.0;//2.0;
 	float kR = 0.35;//5.0;//10.0;//6.0;//0.1;//2.0;
 	float kOmega = 0.15;//4.0;//2.0;//1.5;//0.0;//0.0;//1.0;//0.5;	
 	float g = 9.81;
-	float _hover_throttle = 0.51;//0.7;//0.55;//0.7;
+	float _hover_throttle = 0.7; // gazebo: 0.7, actual: 0.51
 	Eigen::Matrix3f J;
 	float Ixx = 0.03;
 	float Iyy = 0.03;
 	float Izz = 0.06;
 	float torque_constant = 50.0;//100.0;
-	float tradeoff_thrust = 0.0;
+	float tradeoff_thrust = 1.0;//0.0;
 	float tradeoff_roll = 1.0;
 	float tradeoff_pitch = 1.0;
 	float tradeoff_yaw = 1.0;
@@ -139,7 +139,7 @@ class QuadController: public rclcpp::Node
 			sub_attitude = this->create_subscription<px4_msgs::msg::VehicleAttitude>("/fmu/vehicle_attitude/out",10, std::bind(&QuadController::attitude_callback, this, _1));
 			sub_angular_velocity = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>("/fmu/vehicle_angular_velocity/out",10, std::bind(&QuadController::angular_velocity_callback, this, _1));
 			sub_pose_setpoint = this->create_subscription<px4_msgs::msg::TrajectorySetpoint>("fmu/trajectory_setpoint/in",10, std::bind(&QuadController::setpoint_callback, this, _1));
-			
+
 			// Publishers
 			pub_actuator = this->create_publisher<px4_msgs::msg::ExternalActuatorControls>("/fmu/external_actuator_controls/in",10);			
 			timer_ = this->create_wall_timer(2ms, std::bind(&QuadController::controller_callback, this));

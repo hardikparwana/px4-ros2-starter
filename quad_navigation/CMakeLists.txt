@@ -14,6 +14,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(Boost REQUIRED COMPONENTS thread date_time)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(vicon_receiver REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
@@ -26,13 +27,13 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME})
 
 add_executable(offboard_control nodes/offboard_control.cpp)
-ament_target_dependencies(offboard_control rclcpp px4_msgs)
+ament_target_dependencies(offboard_control rclcpp px4_msgs geometry_msgs)
 install(TARGETS
   offboard_control
   DESTINATION lib/${PROJECT_NAME})
 
 add_executable(offboard_control_external nodes/offboard_external_control.cpp)
-ament_target_dependencies(offboard_control_external rclcpp px4_msgs)
+ament_target_dependencies(offboard_control_external rclcpp px4_msgs geometry_msgs)
 install(TARGETS
   offboard_control_external
   DESTINATION lib/${PROJECT_NAME})
